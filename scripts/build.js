@@ -31,7 +31,7 @@ function copyRecursive(src, dest) {
 }
 
 // 2. Copy core directories and files
-const itemsToCopy = ['index.html', 'css', 'js', 'assets'];
+const itemsToCopy = ['index.html', 'manifest.json', 'sw.js', 'css', 'js', 'assets'];
 
 for (const item of itemsToCopy) {
     const srcPath = path.join(ROOT_DIR, item);
@@ -49,6 +49,13 @@ const cloudflareHeaders = `/*
   Referrer-Policy: strict-origin-when-cross-origin
 
 /index.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+  Service-Worker-Allowed: /
+
+/manifest.json
   Cache-Control: public, max-age=0, must-revalidate
 
 /css/*

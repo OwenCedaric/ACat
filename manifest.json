@@ -1,0 +1,31 @@
+{
+  "name": "墨猫跃尘 · 水墨素色猫咪跳跃游戏",
+  "short_name": "墨猫跃尘",
+  "description": "水墨禅意素色灵猫跳跃小品，适配移动端与平板端",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f5f0e6",
+  "theme_color": "#f5f0e6",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": [
+    "games",
+    "entertainment"
+  ],
+  "lang": "zh-CN",
+  "dir": "ltr"
+}

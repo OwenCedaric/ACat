@@ -81,15 +81,17 @@ function serveFile(filePath, req, res) {
     const ext = path.extname(filePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
-    // Cache headers
-    if (isDev) {
+    // Cache headers and PWA headers
+    const basename = path.basename(filePath);
+    if (basename === 'sw.js') {
+        res.setHeader('Service-Worker-Allowed', '/');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (basename === 'manifest.json' || ext === '.html') {
+        res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
+    } else if (isDev) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     } else {
-        if (ext === '.html') {
-            res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate');
-        } else {
-            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-        }
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
 
     const acceptEncoding = req.headers['accept-encoding'] || '';

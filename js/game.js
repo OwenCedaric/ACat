@@ -38,10 +38,12 @@ class Game {
         // Sound state
         this.soundMuted = false;
 
-        // High scores & star ratings stored in localStorage
-        this.levelRecords = this.loadRecords();
+        // Local persistent save data (progress, unlocked levels, records)
+        this.saveData = this.loadRecords();
 
         this.init();
+        this.initServiceWorker();
+        this.initPwaInstall();
     }
 
     init() {
@@ -52,6 +54,16 @@ class Game {
         this.setupKeyboardInput();
         this.setupTouchInput();
         this.setupUIEvents();
+
+        // Restore sound setting
+        try {
+            const savedMute = localStorage.getItem('ink_cat_sound_muted');
+            if (savedMute === 'true' && window.soundManager) {
+                this.soundMuted = window.soundManager.toggleMute();
+                const soundText = document.getElementById('soundText');
+                if (soundText) soundText.textContent = '静音';
+            }
+        } catch (e) {}
 
         // Load level 0
         this.loadLevel(0);
@@ -64,19 +76,126 @@ class Game {
     loadRecords() {
         try {
             const data = localStorage.getItem('ink_cat_records');
-            return data ? JSON.parse(data) : {};
+            const defaultData = {
+                unlockedLevels: [1],
+                records: {},
+                totalFish: 0,
+                totalInk: 0
+            };
+            if (!data) return defaultData;
+            const parsed = JSON.parse(data);
+
+            // Handle legacy format where root object was directly the records dictionary: { "1": { stars: 3, bestTime: 23.4 } }
+            if (parsed && typeof parsed === 'object') {
+                if (!parsed.records && (parsed['1'] || parsed['2'] || parsed['3'] || parsed['4'])) {
+                    const legacyRecords = {};
+                    const unlocked = [1];
+                    for (const k in parsed) {
+                        if (parsed[k] && typeof parsed[k] === 'object' && parsed[k].stars !== undefined) {
+                            legacyRecords[k] = parsed[k];
+                            const numK = parseInt(k, 10);
+                            if (!unlocked.includes(numK)) unlocked.push(numK);
+                            if (!unlocked.includes(numK + 1) && numK < 4) unlocked.push(numK + 1);
+                        }
+                    }
+                    const migrated = {
+                        unlockedLevels: unlocked,
+                        records: legacyRecords,
+                        totalFish: 0,
+                        totalInk: 0
+                    };
+                    localStorage.setItem('ink_cat_records', JSON.stringify(migrated));
+                    return migrated;
+                }
+            }
+
+            if (!parsed.unlockedLevels || !Array.isArray(parsed.unlockedLevels)) {
+                parsed.unlockedLevels = [1];
+            }
+            if (!parsed.records) parsed.records = {};
+            return parsed;
         } catch (e) {
-            return {};
+            return { unlockedLevels: [1], records: {}, totalFish: 0, totalInk: 0 };
         }
     }
 
     saveRecords(lvlId, stars, time) {
         try {
-            if (!this.levelRecords[lvlId] || this.levelRecords[lvlId].stars < stars) {
-                this.levelRecords[lvlId] = { stars, bestTime: time };
-                localStorage.setItem('ink_cat_records', JSON.stringify(this.levelRecords));
+            // Unlock next level upon beating current level
+            const nextLvlId = lvlId + 1;
+            if (!this.saveData.unlockedLevels.includes(nextLvlId) && nextLvlId <= this.levelManager.levels.length) {
+                this.saveData.unlockedLevels.push(nextLvlId);
             }
+
+            const existing = this.saveData.records[lvlId];
+            if (!existing || stars > existing.stars || (stars === existing.stars && time < existing.bestTime)) {
+                this.saveData.records[lvlId] = {
+                    stars: Math.max(existing ? existing.stars : 0, stars),
+                    bestTime: existing && existing.bestTime ? Math.min(existing.bestTime, time) : time,
+                    fish: this.collectedFish,
+                    ink: this.collectedInk
+                };
+            }
+
+            this.saveData.totalFish = (this.saveData.totalFish || 0) + this.collectedFish;
+            this.saveData.totalInk = (this.saveData.totalInk || 0) + this.collectedInk;
+
+            localStorage.setItem('ink_cat_records', JSON.stringify(this.saveData));
         } catch (e) {}
+    }
+
+    resetProgress() {
+        try {
+            localStorage.removeItem('ink_cat_records');
+            this.saveData = { unlockedLevels: [1], records: {}, totalFish: 0, totalInk: 0 };
+            this.showLevelSelect();
+        } catch (e) {}
+    }
+
+    initServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then((reg) => {
+                        console.log('[PWA] 离线服务已就绪，缓存已生效');
+                    })
+                    .catch((err) => {
+                        console.warn('[PWA] 服务注册异常', err);
+                    });
+            });
+        }
+    }
+
+    initPwaInstall() {
+        let deferredPrompt = null;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            const installBtns = document.querySelectorAll('.btn-pwa-install');
+            installBtns.forEach(btn => {
+                btn.style.display = 'inline-flex';
+                btn.onclick = async () => {
+                    if (deferredPrompt) {
+                        deferredPrompt.prompt();
+                        const { outcome } = await deferredPrompt.userChoice;
+                        if (outcome === 'accepted') {
+                            installBtns.forEach(b => b.style.display = 'none');
+                        }
+                        deferredPrompt = null;
+                    }
+                };
+            });
+        });
+
+        // Click handler for iOS or browsers without beforeinstallprompt
+        const installBtns = document.querySelectorAll('.btn-pwa-install');
+        installBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!deferredPrompt) {
+                    alert('在 Safari 或移动浏览器中轻触【分享】或【菜单】图标，选择【添加到主屏幕】，即可像本地应用一样全屏离线游玩！');
+                }
+            });
+        });
     }
 
     resize() {
@@ -384,6 +503,16 @@ class Game {
             btn.addEventListener('click', () => this.showStartScreen());
         });
 
+        // Reset progress button
+        const btnReset = document.getElementById('btnResetProgress');
+        if (btnReset) {
+            btnReset.addEventListener('click', () => {
+                if (confirm('是否确认重新封卷？这将清空本地所有关卡解锁进度与评级记录。')) {
+                    this.resetProgress();
+                }
+            });
+        }
+
         // Cat Meow click
         const catAvatar = document.getElementById('hudCatAvatar');
         if (catAvatar) {
@@ -421,24 +550,27 @@ class Game {
 
         this.levelManager.levels.forEach((lvl, idx) => {
             const card = document.createElement('div');
-            card.className = 'level-card';
-            const rec = this.levelRecords[lvl.id] || { stars: 0, bestTime: null };
+            const isUnlocked = this.saveData.unlockedLevels.includes(lvl.id);
+            card.className = isUnlocked ? 'level-card' : 'level-card locked';
+            const rec = this.saveData.records[lvl.id] || { stars: 0, bestTime: null };
             
             const starTexts = ['尚未涉足', '一品达成', '二品达成', '三品圆满'];
-            const starHtml = starTexts[rec.stars] || '尚未涉足';
+            const starHtml = isUnlocked ? (starTexts[rec.stars] || '尚未涉足') : '封锁 · 待通前卷';
 
             card.innerHTML = `
-                <div class="card-stamp">${lvl.id}</div>
+                <div class="card-stamp">${isUnlocked ? lvl.id : '锁'}</div>
                 <div class="card-title">${lvl.name}</div>
                 <div class="card-subtitle">${lvl.subtitle}</div>
                 <div class="card-stars">${starHtml}</div>
                 ${rec.bestTime ? `<div class="card-time">最快: ${rec.bestTime.toFixed(1)}秒</div>` : ''}
-                <button class="btn-card-play">启程</button>
+                <button class="btn-card-play"${isUnlocked ? '' : ' disabled'}>${isUnlocked ? '启程' : '未解锁'}</button>
             `;
 
-            card.querySelector('.btn-card-play').addEventListener('click', () => {
-                this.startNewGame(idx);
-            });
+            if (isUnlocked) {
+                card.querySelector('.btn-card-play').addEventListener('click', () => {
+                    this.startNewGame(idx);
+                });
+            }
 
             container.appendChild(card);
         });
