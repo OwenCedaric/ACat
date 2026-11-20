@@ -1,0 +1,29 @@
+{
+  "name": "acat-ink-cat-game",
+  "version": "1.0.0",
+  "description": "水墨素色猫咪跳跃网页游戏 - 专为移动端、平板与桌面打造",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --dev",
+    "build": "node scripts/build.js",
+    "preview": "node server.js --port 4173",
+    "deploy": "wrangler pages deploy dist --project-name acat-ink-cat-game"
+  },
+  "keywords": [
+    "game",
+    "canvas",
+    "ink-wash",
+    "chinese-painting",
+    "mobile-game",
+    "cloudflare-pages"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.100.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

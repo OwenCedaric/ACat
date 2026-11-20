@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>墨猫跃尘 · 水墨素色猫咪跳跃游戏</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%231a1a1c'/><circle cx='12' cy='14' r='2' fill='%23e8ba45'/><circle cx='20' cy='14' r='2' fill='%23e8ba45'/><polygon points='16,18 14,20 18,20' fill='%23d77d73'/><polygon points='8,10 5,3 12,6' fill='%231a1a1c'/><polygon points='24,10 27,3 20,6' fill='%231a1a1c'/></svg>">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="gameContainer">
+        <!-- Main Canvas -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Top HUD -->
+        <div id="hud">
+            <div class="hud-left">
+                <div class="hud-avatar" id="hudCatAvatar" title="轻触唤醒猫咪">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 5c-4.4 0-8 3-8 6.8 0 2.2 1.3 4.2 3.2 5.4V20l3.1-1.3c.5.2 1.1.3 1.7.3 4.4 0 8-3 8-6.8S16.4 5 12 5z"/>
+                        <path d="M7 6L4.5 2.5 8 4.5"/>
+                        <path d="M17 6l2.5-3.5L16 4.5"/>
+                        <circle cx="9.5" cy="11" r="1.2" fill="currentColor"/>
+                        <circle cx="14.5" cy="11" r="1.2" fill="currentColor"/>
+                        <path d="M12 13v1"/>
+                        <path d="M5.5 12h2.5"/>
+                        <path d="M16 12h2.5"/>
+                    </svg>
+                </div>
+                <div class="hud-info">
+                    <div class="hud-level-title" id="levelTitleHud">第一关 · 瓦顶飞檐</div>
+                    <div class="hud-stats">
+                        <div class="stat-item">
+                            <svg class="stat-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.46-3.44 6-7 6s-7.56-2.54-8.5-6Z"/>
+                                <path d="M18 12v.5"/>
+                                <path d="M16 10h.01"/>
+                                <path d="M2 7l4.5 5L2 17"/>
+                            </svg>
+                            <span id="hudFishCount">0/0</span>
+                        </div>
+                        <div class="stat-item">
+                            <svg class="stat-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+                            </svg>
+                            <span id="hudInkCount">0/0</span>
+                        </div>
+                        <div class="stat-item">
+                            <svg class="stat-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <span id="hudTimer">0.0s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="hud-right">
+                <button class="hud-btn" id="btnSound">
+                    <svg id="iconSound" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                        <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                    </svg>
+                    <span id="soundText">雅乐</span>
+                </button>
+                <button class="hud-btn" id="btnPause">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="6" y="4" width="4" height="16"/>
+                        <rect x="14" y="4" width="4" height="16"/>
+                    </svg>
+                    <span>暂停</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile & Tablet Virtual Touch Controls -->
+        <div id="touchControls">
+            <div class="touch-cluster">
+                <button class="touch-btn" id="btnLeft">
+                    <!-- Left Stepping Paw Footprint Icon -->
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 12c-1.8.8-3.4-.2-3.8-1.8-.4-1.4.3-2.8 1.7-3.4l1.5-.6c1.5-.6 3.1.2 3.5 1.7.5 1.7-.5 3.3-2.9 4.1z" fill="currentColor"/>
+                        <circle cx="9" cy="14" r="1.3" fill="currentColor"/>
+                        <circle cx="7" cy="11.5" r="1.3" fill="currentColor"/>
+                        <circle cx="8" cy="8.5" r="1.3" fill="currentColor"/>
+                        <circle cx="11" cy="6.5" r="1.3" fill="currentColor"/>
+                        <polyline points="5 18 2 15 5 12" stroke-width="2"/>
+                    </svg>
+                    <span>左步</span>
+                </button>
+                <button class="touch-btn" id="btnRight">
+                    <!-- Right Stepping Paw Footprint Icon -->
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M10 12c1.8.8 3.4-.2 3.8-1.8.4-1.4-.3-2.8-1.7-3.4l-1.5-.6c-1.5-.6-3.1.2-3.5 1.7-.5 1.7.5 3.3 2.9 4.1z" fill="currentColor"/>
+                        <circle cx="15" cy="14" r="1.3" fill="currentColor"/>
+                        <circle cx="17" cy="11.5" r="1.3" fill="currentColor"/>
+                        <circle cx="16" cy="8.5" r="1.3" fill="currentColor"/>
+                        <circle cx="13" cy="6.5" r="1.3" fill="currentColor"/>
+                        <polyline points="19 18 22 15 19 12" stroke-width="2"/>
+                    </svg>
+                    <span>右步</span>
+                </button>
+            </div>
+            <div class="touch-cluster">
+                <button class="touch-btn" id="btnJump">
+                    <!-- Leaping Cat Silhouette Icon (飞跃灵猫) -->
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 13c1.8-2.5 4.5-3.5 7.5-3.5 2.5 0 4.5-1.5 5.5-4 1 1.8 2.5 2.8 4.2 2.8 1.8 0 2.8 1.2 2.8 2.7"/>
+                        <path d="M18.5 7.5l2-4-3 1.2"/>
+                        <path d="M19 11l2.5 3.5"/>
+                        <path d="M5.5 13l-3 4.5"/>
+                        <path d="M11 11l-2 5"/>
+                        <path d="M3 13c-1.2-2-.5-4.8 1-6.5"/>
+                    </svg>
+                    <span>踏墨二段</span>
+                </button>
+                <button class="touch-btn btn-charge-jump" id="btnCharge">
+                    <!-- Cat Paw Footprint (梅花肉垫爪印) -->
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <!-- Main Palm Pad -->
+                        <path d="M12 11.5c-2.4 0-4.2 1.6-4.2 3.8 0 1.8 1.4 3.2 3.2 3.2h2c1.8 0 3.2-1.4 3.2-3.2 0-2.2-1.8-3.8-4.2-3.8z" fill="currentColor"/>
+                        <!-- 4 Toes -->
+                        <circle cx="6.8" cy="9.2" r="1.8" fill="currentColor"/>
+                        <circle cx="10.2" cy="6.2" r="1.9" fill="currentColor"/>
+                        <circle cx="13.8" cy="6.2" r="1.9" fill="currentColor"/>
+                        <circle cx="17.2" cy="9.2" r="1.8" fill="currentColor"/>
+                    </svg>
+                    <span>起跳</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             Modals & Screens
+             ========================================== -->
+
+        <!-- 1. Start Screen -->
+        <div class="modal-overlay" id="startScreen">
+            <div class="scroll-card">
+                <div class="seal-stamp">素墨</div>
+                <h1 class="modal-title">墨猫跃尘</h1>
+                <div class="modal-subtitle">水墨禅意 · 素色灵猫跳跃小品</div>
+                
+                <div class="instruction-box">
+                    <strong>【行云踏墨秘诀】</strong>
+                    <ul>
+                        <li><strong>即时轻跳：</strong>点击屏幕或右下角【起跳】立即腾跃，轻按小跳，长按大跳！</li>
+                        <li><strong>踏墨二段：</strong>在半空中再次点击【起跳】或【踏墨二段】触发二段跳，自在跨越鸿沟。</li>
+                        <li><strong>移动助跑：</strong>点击左下角【慢行】箭头移动，助跑起跳跃得更远。</li>
+                        <li><strong>手势弹道：</strong>在屏幕上向后拖拽滑动，可调出水墨抛物线精确瞄准！</li>
+                        <li><strong>电脑按键：</strong>A/D 或 方向键移动，空格键即时起跳与空中二段跳。</li>
+                    </ul>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn-primary" id="btnStartGame">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        启程入画
+                    </button>
+                    <button class="btn-secondary" id="btnSelectLevel">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3V6z"/><path d="M9 3v15"/><path d="M15 6v15"/></svg>
+                        关卡山卷
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Level Select Modal -->
+        <div class="modal-overlay hidden" id="levelSelectModal">
+            <div class="scroll-card level-select-container">
+                <div class="seal-stamp">画卷</div>
+                <h2 class="modal-title">关卡画卷</h2>
+                <div class="modal-subtitle">群峰叠嶂 · 江南烟波</div>
+
+                <div class="level-grid" id="levelGrid">
+                    <!-- Populated dynamically via JS -->
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn-secondary btn-menu">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        返回主卷
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Victory Modal -->
+        <div class="modal-overlay hidden" id="victoryModal">
+            <div class="scroll-card">
+                <div class="seal-stamp">大吉</div>
+                <h2 class="modal-title">踏雪登仙</h2>
+                <div class="modal-subtitle" id="victoryLevelName">关卡结算</div>
+
+                <div class="stars-rating" id="victoryStars">三星达成</div>
+                <div class="rank-badge" id="victoryRank">神行妙墨</div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="label">历时</div>
+                        <div class="val" id="victoryTime">0.0 秒</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="label">小鱼干</div>
+                        <div class="val" id="victoryFish">0/0</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="label">水墨滴</div>
+                        <div class="val" id="victoryInk">0/0</div>
+                    </div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn-primary" id="btnNextLevel">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                        下一画境
+                    </button>
+                    <button class="btn-secondary btn-restart">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        再试身手
+                    </button>
+                    <button class="btn-secondary btn-menu">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        画卷总览
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. Defeat / Fall Modal -->
+        <div class="modal-overlay hidden" id="defeatModal">
+            <div class="scroll-card">
+                <div class="seal-stamp">归尘</div>
+                <h2 class="modal-title">失足落凡</h2>
+                <div class="modal-subtitle">“胜败乃猫生常事，凝神静气再跃一次”</div>
+
+                <div class="modal-body">
+                    灵猫偶失足，墨痕犹在纸。稍作歇息，抖擞精神，定能一跃过云！
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn-primary btn-restart">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        重整旗鼓
+                    </button>
+                    <button class="btn-secondary btn-menu">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        返回画卷
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. Pause Modal -->
+        <div class="modal-overlay hidden" id="pauseModal">
+            <div class="scroll-card">
+                <div class="seal-stamp">小憩</div>
+                <h2 class="modal-title">墨香微驻</h2>
+                <div class="modal-subtitle">且待清茗半盏，再续跳跃奇旅</div>
+
+                <div class="modal-actions" style="margin-top: 25px;">
+                    <button class="btn-primary" id="btnResume">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        继续行旅
+                    </button>
+                    <button class="btn-secondary btn-restart">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                        重新开始
+                    </button>
+                    <button class="btn-secondary btn-menu">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        返回主卷
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Scripts -->
+    <script src="js/audio.js"></script>
+    <script src="js/particles.js"></script>
+    <script src="js/cat.js"></script>
+    <script src="js/levels.js"></script>
+    <script src="js/camera.js"></script>
+    <script src="js/game.js"></script>
+</body>
+</html>
