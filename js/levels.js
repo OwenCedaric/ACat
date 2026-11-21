@@ -596,9 +596,81 @@ class LevelManager {
                 case 'pagoda_spire':
                     this.drawGrandBuilding(ctx, rx, ry, p.w, p.h, p.type);
                     break;
+                case 'ink_bridge':
+                    this.drawInkBridge(ctx, rx, ry, p.w, p.h, p);
+                    break;
             }
             ctx.restore();
         }
+    }
+
+    // Traditional Ink Wash Bridge (泼墨水墨飞桥)
+    drawInkBridge(ctx, x, y, w, h, p) {
+        ctx.save();
+        // Progress of brush stroke appear animation
+        const elapsed = (performance.now() - (p.spawnTime || 0)) / 380;
+        const progress = Math.min(1.0, Math.max(0.1, elapsed));
+        const currentW = w * progress;
+
+        // 1. Mist aura under the bridge
+        ctx.fillStyle = 'rgba(235, 230, 220, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(x + currentW * 0.5, y + h + 8, currentW * 0.45, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 2. Main ink wood board
+        ctx.fillStyle = '#222124'; // Deep charcoal ink
+        ctx.strokeStyle = '#100f12';
+        ctx.lineWidth = 1.8;
+        
+        ctx.beginPath();
+        // Slightly curved organic calligraphic edges
+        ctx.moveTo(x, y + 3);
+        ctx.quadraticCurveTo(x + currentW * 0.5, y - 2, x + currentW, y + 3);
+        ctx.lineTo(x + currentW - 2, y + h);
+        ctx.quadraticCurveTo(x + currentW * 0.5, y + h + 2, x + 2, y + h);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // 3. Wooden grain plank lines
+        ctx.strokeStyle = 'rgba(65, 62, 68, 0.65)';
+        ctx.lineWidth = 1.2;
+        const plankStep = 30;
+        for (let px = x + 24; px < x + currentW - 10; px += plankStep) {
+            ctx.beginPath();
+            ctx.moveTo(px, y + 2);
+            ctx.lineTo(px, y + h - 1);
+            ctx.stroke();
+        }
+
+        // 4. Red Cinnabar Seal Stamps at bridge joints (朱砂固梁印)
+        if (progress > 0.55) {
+            const sealX = x + 10;
+            const sealY = y + 4;
+            ctx.fillStyle = 'rgba(184, 56, 40, 0.88)';
+            ctx.fillRect(sealX, sealY, 11, 11);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 8px "Noto Serif SC", serif';
+            ctx.fillText('稳', sealX + 2, sealY + 9);
+        }
+
+        // 5. Plum blossom paw marks on the bridge
+        if (progress > 0.75) {
+            ctx.fillStyle = 'rgba(215, 180, 110, 0.45)';
+            for (let px = x + 40; px < x + currentW - 30; px += 55) {
+                ctx.beginPath();
+                ctx.arc(px, y + 7, 2.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(px - 2.5, y + 4, 1.0, 0, Math.PI * 2);
+                ctx.arc(px, y + 3, 1.0, 0, Math.PI * 2);
+                ctx.arc(px + 2.5, y + 4, 1.0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        ctx.restore();
     }
 
     // Traditional Chinese Roof with Upturned Eaves (青瓦飞檐)

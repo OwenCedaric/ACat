@@ -3,7 +3,7 @@
  * Enables 100% offline play, instant asset loading, and native app experience.
  */
 
-const CACHE_NAME = 'ink-cat-cache-v1.0.0';
+const CACHE_NAME = 'ink-cat-cache-v1.1.0';
 
 const PRECACHE_ASSETS = [
     './',

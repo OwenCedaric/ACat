@@ -27,14 +27,17 @@ class InkCat {
         this.isGrounded = false;
         this.isJumpHeld = false;
         this.isCharging = false;
+        this.isAiming = false;
         this.chargeTime = 0;
         this.maxChargeTime = 30; // Very fast charge if used
         this.chargePower = 0;
+        this.aimPower = 0.6;
         this.aimAngle = -Math.PI / 3; // Default ~60 deg upward
         this.hasDoubleJumped = false;
         this.state = 'idle'; // idle, run, crouch, jump, fall, land, dead, victory
         this.isAlive = true;
         this.hasWon = false;
+        this.invulnerableTimer = 0;
 
         // Visual squash & stretch
         this.scaleX = 1;
@@ -71,12 +74,16 @@ class InkCat {
         this.scaleY = 1;
         this.isGrounded = false;
         this.isCharging = false;
+        this.isAiming = false;
         this.chargeTime = 0;
         this.chargePower = 0;
+        this.aimPower = 0.6;
+        this.aimAngle = -Math.PI / 3;
         this.hasDoubleJumped = false;
         this.state = 'idle';
         this.isAlive = true;
         this.hasWon = false;
+        this.invulnerableTimer = 0;
         this.facing = 1;
         this.walkCycle = 0;
         this.lastStepCycle = 0;
@@ -138,8 +145,10 @@ class InkCat {
     // Direct slingshot / aimed fling
     fling(angle, powerRatio = 0.8, particleSystem = null) {
         if (!this.isAlive || this.hasWon) return;
-        const power = Math.max(0.4, Math.min(1.0, powerRatio));
-        const jumpSpeed = 9.5 + power * 8.5;
+        this.isAiming = false;
+        this.isCharging = false;
+        const power = Math.max(0.35, Math.min(1.0, powerRatio));
+        const jumpSpeed = 8.5 + power * 9.5;
 
         this.vx = Math.cos(angle) * jumpSpeed;
         this.vy = Math.sin(angle) * jumpSpeed;
@@ -149,15 +158,38 @@ class InkCat {
         this.isJumpHeld = true;
 
         this.scaleX = 0.65;
-        this.scaleY = 1.4;
+        this.scaleY = 1.45;
 
         if (window.soundManager) {
             window.soundManager.playJump(power);
         }
 
         if (particleSystem) {
-            particleSystem.createInkSplatter(this.x, this.y + 10, 10, 1.3);
+            particleSystem.createInkSplatter(this.x, this.y + 10, Math.floor(8 + power * 10), 1.3);
         }
+    }
+
+    // Aiming controls for trajectory preview
+    startAim(angle = null, power = 0.6) {
+        if (!this.isAlive || this.hasWon) return;
+        this.isAiming = true;
+        this.aimPower = Math.max(0.35, Math.min(1.0, power));
+        if (angle !== null) {
+            this.aimAngle = angle;
+        } else {
+            this.aimAngle = this.facing > 0 ? -Math.PI * 0.35 : -Math.PI * 0.65;
+        }
+    }
+
+    updateAim(angle, power) {
+        if (!this.isAlive || this.hasWon) return;
+        this.isAiming = true;
+        this.aimAngle = angle;
+        this.aimPower = Math.max(0.35, Math.min(1.0, power));
+    }
+
+    stopAim() {
+        this.isAiming = false;
     }
 
     // Start charging jump (optional quick aim)
@@ -181,7 +213,8 @@ class InkCat {
     setAim(angle, powerRatio = null) {
         this.aimAngle = angle;
         if (powerRatio !== null) {
-            this.chargePower = Math.min(1.0, Math.max(0.4, powerRatio));
+            this.aimPower = Math.min(1.0, Math.max(0.35, powerRatio));
+            this.chargePower = this.aimPower;
         }
     }
 
@@ -280,15 +313,18 @@ class InkCat {
             return;
         }
 
-        // Charge accumulation
-        if (this.isCharging) {
-            this.chargeTime++;
-            this.chargePower = Math.min(1.0, this.chargeTime / this.maxChargeTime);
-            // Crouch squash while charging
-            const crouch = this.chargePower * 0.45;
-            this.scaleX = 1.0 + crouch * 0.8;
-            this.scaleY = 1.0 - crouch * 0.6;
-            this.vx *= 0.5; // Cannot slide fast while crouching
+        // Charge or Aiming accumulation
+        if (this.isCharging || this.isAiming) {
+            if (this.isCharging) {
+                this.chargeTime++;
+                this.chargePower = Math.min(1.0, this.chargeTime / this.maxChargeTime);
+            }
+            const power = this.isAiming ? this.aimPower : this.chargePower;
+            // Crouch squash while aiming/charging
+            const crouch = power * 0.42;
+            this.scaleX = 1.0 + crouch * 0.75;
+            this.scaleY = 1.0 - crouch * 0.55;
+            this.vx *= 0.5; // Cannot slide fast while crouching/aiming
         }
 
         // Physics integration
@@ -322,7 +358,7 @@ class InkCat {
         this.scaleY += this.squashVelY;
 
         // Determine state
-        if (this.isCharging) {
+        if (this.isCharging || this.isAiming) {
             this.state = 'crouch';
         } else if (!this.isGrounded) {
             this.state = this.vy < 0 ? 'jump' : 'fall';
@@ -398,40 +434,129 @@ class InkCat {
         }
     }
 
-    // Trajectory arc preview for aiming
-    drawTrajectory(ctx, camX, camY) {
-        if (!this.isCharging || !this.isAlive) return;
+    // Trajectory arc preview for aiming (水墨抛物线预判系统)
+    drawTrajectory(ctx, camX, camY, platforms = []) {
+        if ((!this.isAiming && !this.isCharging) || !this.isAlive) return;
 
-        const power = Math.max(0.35, this.chargePower);
-        const jumpSpeed = 8.0 + power * 9.5;
+        const power = Math.max(0.35, Math.min(1.0, this.isAiming ? this.aimPower : this.chargePower));
+        const jumpSpeed = 8.5 + power * 9.5;
         let simX = this.x;
         let simY = this.y;
         let simVx = Math.cos(this.aimAngle) * jumpSpeed;
         let simVy = Math.sin(this.aimAngle) * jumpSpeed;
 
-        ctx.save();
-        ctx.setLineDash([4, 6]);
-        ctx.strokeStyle = 'rgba(40, 40, 40, 0.7)';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(simX - camX, simY - camY);
+        const trajectoryPoints = [{ x: simX, y: simY }];
+        let hitPlatform = null;
+        let hitX = 0;
+        let hitY = 0;
 
-        const steps = 28;
+        const steps = 38;
         for (let i = 0; i < steps; i++) {
+            const prevSimX = simX;
+            const prevSimY = simY;
+
             simX += simVx;
             simY += simVy;
             simVy += this.gravity;
             simVx *= this.airFriction;
-            ctx.lineTo(simX - camX, simY - camY);
+
+            // Check collision with platforms along the trajectory arc
+            let intersected = false;
+            if (platforms && platforms.length > 0) {
+                for (const p of platforms) {
+                    const py = (p.currentY !== undefined ? p.currentY : p.y) + (p.sinkDepth || 0) + (p.flex || 0);
+                    const margin = 8;
+                    if (simX >= p.x - margin && simX <= p.x + p.w + margin) {
+                        if (prevSimY <= py + 14 && simY >= py - 8 && simVy >= 0) {
+                            hitPlatform = p;
+                            hitX = simX;
+                            hitY = py;
+                            intersected = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (intersected) {
+                trajectoryPoints.push({ x: hitX, y: hitY });
+                break;
+            } else {
+                trajectoryPoints.push({ x: simX, y: simY });
+            }
+        }
+
+        ctx.save();
+        // 1. Draw ink calligraphy dotted trajectory arc
+        ctx.setLineDash([4, 6]);
+        ctx.strokeStyle = 'rgba(35, 35, 40, 0.75)';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(trajectoryPoints[0].x - camX, trajectoryPoints[0].y - camY);
+        for (let i = 1; i < trajectoryPoints.length; i++) {
+            ctx.lineTo(trajectoryPoints[i].x - camX, trajectoryPoints[i].y - camY);
         }
         ctx.stroke();
 
-        // End target ink splash dot
+        // 2. Draw trajectory gradient dots along the path
         ctx.setLineDash([]);
-        ctx.fillStyle = 'rgba(180, 40, 40, 0.85)'; // 朱砂红瞄准印记
+        for (let i = 2; i < trajectoryPoints.length; i += 3) {
+            const pt = trajectoryPoints[i];
+            const dotAlpha = 0.85 - (i / trajectoryPoints.length) * 0.45;
+            const dotRadius = Math.max(1.8, 3.4 - (i / trajectoryPoints.length) * 1.5);
+            ctx.fillStyle = `rgba(38, 38, 42, ${dotAlpha})`;
+            ctx.beginPath();
+            ctx.arc(pt.x - camX, pt.y - camY, dotRadius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // 3. Landing Target: Cinnabar Red Seal (朱砂墨落点)
+        const endPt = trajectoryPoints[trajectoryPoints.length - 1];
+        const endRx = endPt.x - camX;
+        const endRy = endPt.y - camY;
+
+        if (hitPlatform) {
+            // High-confidence landing spot on a platform: double ring cinnabar seal
+            ctx.strokeStyle = 'rgba(184, 56, 40, 0.9)';
+            ctx.lineWidth = 2.0;
+            ctx.beginPath();
+            ctx.ellipse(endRx, endRy, 14, 6, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(184, 56, 40, 0.75)';
+            ctx.beginPath();
+            ctx.arc(endRx, endRy, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Landing preview text
+            ctx.font = '11px "Noto Serif SC", "Songti SC", serif';
+            ctx.fillStyle = 'rgba(184, 56, 40, 0.85)';
+            ctx.textAlign = 'center';
+            ctx.fillText('落点', endRx, endRy - 10);
+        } else {
+            // General arc terminus
+            ctx.fillStyle = 'rgba(184, 56, 40, 0.85)';
+            ctx.beginPath();
+            ctx.arc(endRx, endRy, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(184, 56, 40, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(endRx, endRy, 9, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+
+        // 4. Cat launch vector arrow at cat paw
+        const arrowLen = 22 + power * 26;
+        const arrowEndX = this.x + Math.cos(this.aimAngle) * arrowLen - camX;
+        const arrowEndY = this.y + Math.sin(this.aimAngle) * arrowLen - camY;
+
+        ctx.strokeStyle = 'rgba(184, 56, 40, 0.8)';
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.arc(simX - camX, simY - camY, 5, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(this.x - camX, this.y - camY);
+        ctx.lineTo(arrowEndX, arrowEndY);
+        ctx.stroke();
 
         ctx.restore();
     }
@@ -456,13 +581,35 @@ class InkCat {
         ctx.restore();
 
         // 3. Ink Charge Aura (when crouching)
-        if (this.isCharging) {
+        if (this.isCharging || this.isAiming) {
             ctx.save();
-            ctx.strokeStyle = `rgba(30, 30, 30, ${0.3 + this.chargePower * 0.4})`;
+            const power = this.isAiming ? this.aimPower : this.chargePower;
+            ctx.strokeStyle = `rgba(30, 30, 30, ${0.3 + power * 0.4})`;
             ctx.lineWidth = 1.5;
             ctx.setLineDash([3, 4]);
             ctx.beginPath();
-            ctx.ellipse(renderX, renderY + 5, 24 * (1 + this.chargePower * 0.3), 12, 0, 0, Math.PI * 2);
+            ctx.ellipse(renderX, renderY + 5, 24 * (1 + power * 0.3), 12, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 4. Invulnerable reincarnation aura (九命还魂护体灵光)
+        if (this.invulnerableTimer > 0) {
+            this.invulnerableTimer--;
+            ctx.save();
+            const pulse = Math.sin(Date.now() * 0.015);
+            ctx.strokeStyle = `rgba(184, 56, 40, ${0.5 + pulse * 0.3})`;
+            ctx.lineWidth = 1.8;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.arc(renderX, renderY, 26 + pulse * 3, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Inner golden spirit lotus ring
+            ctx.strokeStyle = `rgba(215, 175, 80, ${0.6 - pulse * 0.2})`;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.arc(renderX, renderY, 18, 0, Math.PI * 2);
             ctx.stroke();
             ctx.restore();
         }

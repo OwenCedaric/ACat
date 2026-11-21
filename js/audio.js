@@ -233,6 +233,42 @@ class SoundManager {
         }, 80);
     }
 
+    // Resurrect / reincarnation at safe spot (九命灵猫还魂)
+    playResurrect() {
+        if (!this.ctx || this.isMuted) return;
+        this.resume();
+
+        const notes = [220, 277.18, 329.63, 440, 659.25];
+        notes.forEach((freq, idx) => {
+            setTimeout(() => {
+                this.playPluck(freq, 1.2, 0.55);
+            }, idx * 80);
+        });
+    }
+
+    // Calligraphy brush whoosh for painting an ink bridge (泼墨成梁)
+    playPaintBridge() {
+        if (!this.ctx || this.isMuted) return;
+        this.resume();
+
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(160, t);
+        osc.frequency.exponentialRampToValueAtTime(75, t + 0.35);
+
+        gain.gain.setValueAtTime(0.45, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.35);
+
+        // Brush noise whoosh
+        this.playJump(1.3);
+    }
+
     // Cat Meow (water ink kitten purr/meow)
     playMeow() {
         if (!this.ctx || this.isMuted) return;

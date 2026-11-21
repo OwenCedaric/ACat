@@ -23,13 +23,20 @@ class Game {
         this.levelStartTime = 0;
         this.elapsedTime = 0;
 
-        // Input state
+        // Gameplay mechanics & power-ups (九命灵猫护体 & 泼墨成桥)
+        this.lives = 0;
+        this.bridgeCount = 0;
+        this.lastSafeSpot = null;
+
+        // Input state (unified pointer & keyboard)
         this.keys = {};
         this.touchMoveDir = 0;
-        this.touchCharge = false;
-        this.touchStartPos = null;
-        this.currentTouchPos = null;
-        this.isTouchAiming = false;
+        this.pointerStartX = 0;
+        this.pointerStartY = 0;
+        this.pointerCurrentX = 0;
+        this.pointerCurrentY = 0;
+        this.isPointerDown = false;
+        this.hasDraggedToAim = false;
 
         // Performance / Frame loop
         this.lastTime = performance.now();
@@ -225,6 +232,9 @@ class Game {
 
         this.collectedFish = 0;
         this.collectedInk = 0;
+        this.lives = 0;
+        this.bridgeCount = 0;
+        this.lastSafeSpot = { x: lvl.startX, y: lvl.startY };
         this.totalFish = lvl.collectibles.filter(c => c.type === 'fish').length;
         this.totalInk = lvl.collectibles.filter(c => c.type === 'ink').length;
         this.levelStartTime = performance.now();
@@ -283,6 +293,9 @@ class Game {
                     }
                 }
                 e.preventDefault();
+            } else if (e.key === 'b' || e.key === 'B' || e.key === 'e' || e.key === 'E') {
+                this.spawnInkBridge();
+                e.preventDefault();
             } else if (e.key === 'r' || e.key === 'R') {
                 this.restartLevel();
             } else if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
@@ -305,86 +318,93 @@ class Game {
     setupTouchInput() {
         const c = this.canvas;
 
-        // Slingshot / Direct Screen Touch
-        const getTouchPos = (e) => {
-            const touch = e.touches[0] || e.changedTouches[0];
+        // Unified Canvas Pointer Handling (Mouse, Pen & Touch)
+        const getPointerPos = (e) => {
             const rect = c.getBoundingClientRect();
             return {
-                x: touch.clientX - rect.left,
-                y: touch.clientY - rect.top
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
             };
         };
 
-        c.addEventListener('touchstart', (e) => {
+        c.addEventListener('pointerdown', (e) => {
             if (this.state !== 'playing') return;
             if (window.soundManager) window.soundManager.resume();
-
-            // Avoid triggering when tapping HUD buttons
             if (e.target !== c) return;
 
-            const pos = getTouchPos(e);
-            this.touchStartPos = pos;
-            this.currentTouchPos = pos;
-            this.isTouchAiming = false;
+            const pos = getPointerPos(e);
+            this.pointerStartX = pos.x;
+            this.pointerStartY = pos.y;
+            this.pointerCurrentX = pos.x;
+            this.pointerCurrentY = pos.y;
+            this.isPointerDown = true;
+            this.hasDraggedToAim = false;
 
-            // Direct instant responsive jump on tap!
-            this.cat.jump(this.particles);
-            this.cat.setJumpHeld(true);
-
+            if (c.setPointerCapture) {
+                try { c.setPointerCapture(e.pointerId); } catch (err) {}
+            }
             e.preventDefault();
-        }, { passive: false });
+        });
 
-        c.addEventListener('touchmove', (e) => {
-            if (this.state !== 'playing' || !this.touchStartPos) return;
-            const pos = getTouchPos(e);
-            this.currentTouchPos = pos;
+        c.addEventListener('pointermove', (e) => {
+            if (!this.isPointerDown || this.state !== 'playing') return;
+            const pos = getPointerPos(e);
+            this.pointerCurrentX = pos.x;
+            this.pointerCurrentY = pos.y;
 
-            const dx = this.touchStartPos.x - pos.x;
-            const dy = this.touchStartPos.y - pos.y;
+            // Slingshot pull calculation (向后下方拉动，向前上方弹射)
+            const dx = this.pointerStartX - pos.x;
+            const dy = this.pointerStartY - pos.y;
             const dist = Math.hypot(dx, dy);
 
-            if (dist > 20) {
-                this.isTouchAiming = true;
-                let angle = Math.atan2(-dy, -dx);
-                if (angle > 0) angle = -angle;
+            if (dist > 14) {
+                this.hasDraggedToAim = true;
+                let angle = Math.atan2(dy, dx);
+                // Ensure launch angle is directed upward into the sky
+                if (angle > -0.15 && angle <= Math.PI * 0.5) {
+                    angle = -0.15;
+                } else if (angle > Math.PI * 0.5) {
+                    angle = -Math.PI + 0.15;
+                }
 
-                const powerRatio = Math.min(1.0, dist / 110);
-                this.cat.setAim(angle, powerRatio);
+                const powerRatio = Math.min(1.0, Math.max(0.35, dist / 115));
+                this.cat.updateAim(angle, powerRatio);
                 this.cat.facing = dx >= 0 ? 1 : -1;
             }
             e.preventDefault();
-        }, { passive: false });
+        });
 
-        const endTouch = (e) => {
-            if (this.state !== 'playing') return;
-            this.cat.setJumpHeld(false);
-
-            if (this.isTouchAiming && this.touchStartPos && this.currentTouchPos) {
-                const dx = this.touchStartPos.x - this.currentTouchPos.x;
-                const dy = this.touchStartPos.y - this.currentTouchPos.y;
-                const dist = Math.hypot(dx, dy);
-
-                if (dist > 20) {
-                    let angle = Math.atan2(-dy, -dx);
-                    if (angle > 0) angle = -angle;
-                    const powerRatio = Math.min(1.0, dist / 110);
-                    this.cat.fling(angle, powerRatio, this.particles);
-                }
+        const handlePointerEnd = (e) => {
+            if (!this.isPointerDown || this.state !== 'playing') return;
+            this.isPointerDown = false;
+            if (c.releasePointerCapture) {
+                try { c.releasePointerCapture(e.pointerId); } catch (err) {}
             }
 
-            this.isTouchAiming = false;
-            this.touchStartPos = null;
-            this.currentTouchPos = null;
+            if (this.hasDraggedToAim && this.cat.isAiming) {
+                // Fling along calculated ink trajectory!
+                this.cat.fling(this.cat.aimAngle, this.cat.aimPower, this.particles);
+            } else {
+                // Quick tap jump / double jump
+                this.cat.jump(this.particles);
+                this.cat.setJumpHeld(false);
+            }
+
+            this.cat.stopAim();
+            this.hasDraggedToAim = false;
+            e.preventDefault();
         };
 
-        c.addEventListener('touchend', endTouch);
-        c.addEventListener('touchcancel', endTouch);
+        c.addEventListener('pointerup', handlePointerEnd);
+        c.addEventListener('pointercancel', handlePointerEnd);
 
         // Virtual On-Screen Buttons (for Mobile / Tablet)
         const btnLeft = document.getElementById('btnLeft');
         const btnRight = document.getElementById('btnRight');
         const btnCharge = document.getElementById('btnCharge');
         const btnJump = document.getElementById('btnJump');
+        const btnTouchBridge = document.getElementById('btnTouchBridge');
+        const btnBridgeSkill = document.getElementById('btnBridgeSkill');
 
         const bindButton = (el, onStart, onEnd) => {
             if (!el) return;
@@ -414,7 +434,7 @@ class Game {
         bindButton(btnLeft, () => { this.touchMoveDir = -1; }, () => { if (this.touchMoveDir === -1) this.touchMoveDir = 0; });
         bindButton(btnRight, () => { this.touchMoveDir = 1; }, () => { if (this.touchMoveDir === 1) this.touchMoveDir = 0; });
 
-        // Primary Jump Button 【跃】：Instant jump on touch + hold for higher float!
+        // Primary Jump Button 【起跳】：Instant jump on touch + hold for higher float!
         bindButton(btnCharge, () => {
             if (this.state !== 'playing') return;
             this.cat.jump(this.particles);
@@ -423,7 +443,7 @@ class Game {
             this.cat.setJumpHeld(false);
         });
 
-        // Double Jump Button 【腾】：Direct double jump in air!
+        // Double Jump Button 【踏墨二段】：Direct double jump in air!
         if (btnJump) {
             bindButton(btnJump, () => {
                 if (this.state !== 'playing') return;
@@ -431,6 +451,21 @@ class Game {
                 this.cat.setJumpHeld(true);
             }, () => {
                 this.cat.setJumpHeld(false);
+            });
+        }
+
+        // Ink Bridge Button 【墨桥】
+        if (btnTouchBridge) {
+            bindButton(btnTouchBridge, () => {
+                this.spawnInkBridge();
+            }, () => {});
+        }
+
+        if (btnBridgeSkill) {
+            btnBridgeSkill.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (window.soundManager) window.soundManager.resume();
+                this.spawnInkBridge();
             });
         }
     }
@@ -688,10 +723,15 @@ class Game {
 
                     let surface = 'tile';
                     if (p.type === 'lotus') surface = 'lotus';
-                    else if (p.type === 'raft' || p.type === 'pillar') surface = 'wood';
+                    else if (p.type === 'raft' || p.type === 'pillar' || p.type === 'ink_bridge') surface = 'wood';
                     else if (p.type === 'stone' || p.type === 'cliff') surface = 'stone';
 
                     this.cat.land(py, surface, this.particles);
+
+                    // Record safe landing spot (excluding sinking platforms that sunk too deep)
+                    if (!p.sinkable || (p.sinkDepth || 0) < 12) {
+                        this.lastSafeSpot = { x: this.cat.x, y: py - this.cat.height * 0.5 };
+                    }
                     break;
                 }
             }
@@ -715,17 +755,23 @@ class Game {
                 item.collected = true;
                 if (item.type === 'fish') {
                     this.collectedFish++;
-                    this.score += 150;
+                    this.lives++;
+                    this.score += 200;
+                    this.particles.createFloatingText(item.x, item.y - 18, '九命护体 +1', '#d49b38');
                     this.particles.createInkSplatter(item.x, item.y, 14, 1.2, 'rgba(212, 155, 56, ');
                 } else {
                     this.collectedInk++;
-                    this.score += 80;
-                    this.particles.createInkSplatter(item.x, item.y, 10, 1.0, 'rgba(30, 30, 30, ');
+                    this.bridgeCount++;
+                    this.score += 100;
+                    this.particles.createFloatingText(item.x, item.y - 18, '泼墨成桥 +1', '#2c2b29');
+                    this.particles.createInkSplatter(item.x, item.y, 12, 1.1, 'rgba(30, 30, 30, ');
                 }
 
                 if (window.soundManager) {
                     window.soundManager.playCollect();
                 }
+
+                this.updateHUD();
             }
         }
     }
@@ -746,6 +792,14 @@ class Game {
         if (!lvl || !this.cat.isAlive) return;
 
         if (this.cat.y > lvl.deadY) {
+            // Check if player has extra lives from dried fish (九命灵猫护体)
+            if (this.lives > 0 && this.lastSafeSpot) {
+                this.lives--;
+                this.updateHUD();
+                this.resurrectCat();
+                return;
+            }
+
             this.cat.isAlive = false;
             this.camera.shake(8, 16);
 
@@ -762,6 +816,88 @@ class Game {
                 this.showDefeatModal();
             }, 750);
         }
+    }
+
+    // Reincarnate / Teleport to last safe ground upon falling (灵猫还魂)
+    resurrectCat() {
+        this.camera.shake(6, 12);
+        const lvl = this.levelManager.getCurrentLevel();
+        if (lvl && lvl.type === 'river') {
+            this.particles.createRipple(this.cat.x, lvl.waterY, 55);
+        }
+
+        // Dissolve into ink mist at fall point
+        this.particles.createInkSplatter(this.cat.x, this.cat.y, 16, 1.4, 'rgba(40, 40, 45, ');
+
+        // Return safely to last solid platform
+        if (this.lastSafeSpot) {
+            this.cat.x = this.lastSafeSpot.x;
+            this.cat.y = this.lastSafeSpot.y - 12;
+        }
+        this.cat.vx = 0;
+        this.cat.vy = -3.8;
+        this.cat.isGrounded = false;
+        this.cat.invulnerableTimer = 85;
+
+        // Reincarnation ink swirl at safe landing spot
+        this.particles.createInkSplatter(this.cat.x, this.cat.y, 18, 1.5, 'rgba(184, 56, 40, ');
+        this.particles.createFloatingText(this.cat.x, this.cat.y - 35, '灵猫还魂 · 归落脚处！', '#b83828');
+
+        if (window.soundManager) {
+            window.soundManager.playResurrect();
+        }
+    }
+
+    // Deploy an Ink Bridge (泼墨成梁)
+    spawnInkBridge() {
+        if (this.state !== 'playing' || !this.cat.isAlive) return;
+        if (this.bridgeCount <= 0) {
+            this.particles.createFloatingText(this.cat.x, this.cat.y - 25, '墨力未盈 · 需拾取水墨', '#888888');
+            return;
+        }
+
+        const lvl = this.levelManager.getCurrentLevel();
+        if (!lvl) return;
+
+        this.bridgeCount--;
+        this.updateHUD();
+
+        const bridgeW = 230;
+        const bridgeH = 22;
+        let bridgeX = this.cat.facing > 0 ? this.cat.x - 25 : this.cat.x - bridgeW + 25;
+        let bridgeY = this.cat.isGrounded ? (this.cat.y + 16) : (this.cat.y + 12);
+
+        // Clamp inside level width
+        bridgeX = Math.max(0, Math.min(lvl.width - bridgeW, bridgeX));
+
+        const bridgePlatform = {
+            id: 'ink_bridge_' + Date.now(),
+            x: bridgeX,
+            y: bridgeY,
+            w: bridgeW,
+            h: bridgeH,
+            type: 'ink_bridge',
+            style: 'ink_plank',
+            spawnTime: performance.now(),
+            isBridge: true
+        };
+
+        lvl.platforms.push(bridgePlatform);
+
+        // Catch the cat if currently falling in air
+        if (!this.cat.isGrounded && this.cat.y <= bridgeY + 8) {
+            this.cat.land(bridgeY, 'wood', this.particles);
+        }
+
+        if (window.soundManager) {
+            window.soundManager.playPaintBridge();
+        }
+
+        // Bridge spawn ink splatters
+        for (let bx = bridgeX; bx <= bridgeX + bridgeW; bx += 32) {
+            this.particles.createInkSplatter(bx, bridgeY, 4, 0.9, 'rgba(40, 40, 45, ');
+        }
+        this.particles.createFloatingText(this.cat.x, this.cat.y - 35, '泼墨成桥！', '#b83828');
     }
 
     triggerVictory() {
@@ -815,10 +951,34 @@ class Game {
         const fishEl = document.getElementById('hudFishCount');
         const inkEl = document.getElementById('hudInkCount');
         const timeEl = document.getElementById('hudTimer');
+        const bridgeHudBtn = document.getElementById('btnBridgeSkill');
+        const bridgeHudText = document.getElementById('bridgeText');
+        const touchBridgeBtn = document.getElementById('btnTouchBridge');
+        const touchBridgeText = document.getElementById('touchBridgeText');
 
-        if (fishEl) fishEl.textContent = `${this.collectedFish}/${this.totalFish}`;
-        if (inkEl) inkEl.textContent = `${this.collectedInk}/${this.totalInk}`;
-        if (timeEl) timeEl.textContent = `${this.elapsedTime.toFixed(1)}s`;
+        if (fishEl) {
+            fishEl.textContent = `护体 x${this.lives} (鱼 ${this.collectedFish}/${this.totalFish})`;
+        }
+        if (inkEl) {
+            inkEl.textContent = `墨桥 x${this.bridgeCount} (墨 ${this.collectedInk}/${this.totalInk})`;
+        }
+        if (timeEl) {
+            timeEl.textContent = `${this.elapsedTime.toFixed(1)}s`;
+        }
+
+        if (bridgeHudText) {
+            bridgeHudText.textContent = `泼墨桥(${this.bridgeCount})`;
+        }
+        if (touchBridgeText) {
+            touchBridgeText.textContent = `墨桥 ${this.bridgeCount}`;
+        }
+
+        if (touchBridgeBtn) {
+            touchBridgeBtn.style.opacity = this.bridgeCount > 0 ? '1' : '0.55';
+        }
+        if (bridgeHudBtn) {
+            bridgeHudBtn.style.opacity = this.bridgeCount > 0 ? '1' : '0.65';
+        }
     }
 
     // ==========================================
@@ -836,6 +996,7 @@ class Game {
 
         const camX = this.camera.getRenderX();
         const camY = this.camera.getRenderY();
+        const lvl = this.levelManager.getCurrentLevel();
 
         // 1. Xuan Paper Sky & Parallax Mountains
         this.levelManager.renderBackground(ctx, camX, camY, w, h);
@@ -843,7 +1004,7 @@ class Game {
         // 2. Water body (for river levels)
         this.levelManager.renderWater(ctx, camX, camY, w, h);
 
-        // 3. Platforms (roofs, stones, bamboo, lanterns, clouds)
+        // 3. Platforms (roofs, stones, bamboo, lanterns, clouds, ink bridges)
         this.levelManager.renderPlatforms(ctx, camX, camY);
 
         // 4. Collectibles (fish treats, ink drops)
@@ -855,8 +1016,8 @@ class Game {
         // 6. World particles & ripples
         this.particles.renderWorldParticles(ctx, camX, camY);
 
-        // 7. Cat aiming trajectory preview (when charging)
-        this.cat.drawTrajectory(ctx, camX, camY);
+        // 7. Cat aiming trajectory preview (when aiming / dragging)
+        this.cat.drawTrajectory(ctx, camX, camY, lvl ? lvl.platforms : []);
 
         // 8. Ink Cat character
         this.cat.render(ctx, camX, camY);

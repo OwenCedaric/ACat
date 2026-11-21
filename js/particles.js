@@ -10,6 +10,7 @@ class ParticleSystem {
         this.ambientParticles = [];
         this.stains = []; // Persistent ink stains on paper
         this.footprints = []; // Plum-blossom paw prints (踏雪留痕)
+        this.floatingTexts = []; // Calligraphic ink floating prompt texts
     }
 
     reset() {
@@ -18,6 +19,21 @@ class ParticleSystem {
         this.ambientParticles = [];
         this.stains = [];
         this.footprints = [];
+        this.floatingTexts = [];
+    }
+
+    // Spawn floating calligraphic ink message
+    createFloatingText(x, y, text, color = '#b83828') {
+        this.floatingTexts.push({
+            x: x,
+            y: y,
+            text: text,
+            color: color,
+            alpha: 1.0,
+            vy: -1.2,
+            life: 65,
+            maxLife: 65
+        });
     }
 
     // Spawn tiny fading ink paw prints on platforms
@@ -200,6 +216,18 @@ class ParticleSystem {
             }
         }
 
+        // Update floating calligraphic texts
+        for (let i = this.floatingTexts.length - 1; i >= 0; i--) {
+            const ft = this.floatingTexts[i];
+            ft.y += ft.vy;
+            ft.vy *= 0.96;
+            ft.life--;
+            ft.alpha = ft.life / ft.maxLife;
+            if (ft.life <= 0) {
+                this.floatingTexts.splice(i, 1);
+            }
+        }
+
         // Update ambient weather
         for (let i = 0; i < this.ambientParticles.length; i++) {
             const a = this.ambientParticles[i];
@@ -285,6 +313,19 @@ class ParticleSystem {
                 ctx.arc(p.x - camX, p.y - camY, p.size, 0, Math.PI * 2);
                 ctx.fill();
             }
+            ctx.restore();
+        }
+
+        // Draw floating calligraphic messages in world space
+        for (const ft of this.floatingTexts) {
+            ctx.save();
+            ctx.font = 'bold 15px "Noto Serif SC", "Songti SC", serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = ft.color;
+            ctx.globalAlpha = Math.max(0, ft.alpha);
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+            ctx.shadowBlur = 6;
+            ctx.fillText(ft.text, ft.x - camX, ft.y - camY);
             ctx.restore();
         }
     }
